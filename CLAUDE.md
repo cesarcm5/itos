@@ -64,4 +64,4 @@ The Twelve Data free plan allows 8 credits/min and 800/day. The API caps itself 
 - Validate every input with Zod. TypeScript strict, no `any`.
 - Use env vars for config (validated in `config.ts`) and update `.env.example` whenever a var is added.
 - Frontend: import GSAP only in `app/page.tsx` and `components/landing/`, through `useGSAP`. Use `LazyMotion` + `m` for Motion. Respect `prefers-reduced-motion`. Every data view needs loading (skeletons), empty, error + retry, and stale states. Format currency with `Intl.NumberFormat('es-MX')`.
-- Git: create a new branch from `develop` for every feature, refactor or bug fix. PRs target `main`.
+- Git: create a new branch from `develop` for every feature, refactor or bug fix. PRs target `develop`.
