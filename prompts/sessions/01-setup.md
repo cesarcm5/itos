@@ -23,3 +23,11 @@
 (Switched `DATABASE_URL` from the IPv6-only direct host to the Supabase session pooler, applied `0000_init`, `/health` → ok.)
 
 > sí, haz el commit y crea la rama
+
+> sí, haz push y abre el PR
+
+> Que cambios quieres realizar con respecto al middleware.ts?
+
+> Vale, renombralo y metelo en el mismo PR
+
+(Renamed the frontend route guard `middleware.ts` → `proxy.ts` in `03-frontend.md`, `CLAUDE.md` and `prompts/system/CLAUDE.md`, per the Next 16 upgrade guide. Express `middleware/` in the backend is unchanged.)
