@@ -29,7 +29,7 @@ the API connects with `DATABASE_URL`.
 - `POST /auth/register`, `POST /auth/login` → `{ token, user }`; `GET /auth/me`
 - bcrypt (cost 10); JWT HS256 `{ sub, email }`, expires in 24 h
 - `Authorization: Bearer <token>` (no cookies: Vercel and Railway are different domains)
-- Wrong email or password → the same `401`; `/auth/*` limited to 10 req / 15 min per IP
+- Wrong email or password → the same `401`; per IP: `/auth/register` limited to 5 req / hour, `/auth/login` to 6 req / min
 
 ## Endpoints
 | Method | Path | Auth | Request | Response | Upstream cost |
