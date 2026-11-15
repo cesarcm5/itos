@@ -30,7 +30,7 @@ Each app is independent, with its own `package.json`. Run commands inside `backe
 Browser → Next.js `/api/proxy/[...path]` (reads the httpOnly JWT cookie, adds `Authorization: Bearer`) → Express API on Railway → `marketCache` → `twelveData.ts` → Twelve Data.
 
 - The frontend never calls the Railway API, Twelve Data or Supabase directly. Everything goes through `/api/proxy`. `API_URL` is a server-only env var.
-- Login and register go through `/api/auth/[action]`, which stores the JWT in an httpOnly, Secure, SameSite=Lax cookie. Browser JS never reads the token. Any `401` clears the cookie and redirects to `/login`. `middleware.ts` guards the `(app)` route group.
+- Login and register go through `/api/auth/[action]`, which stores the JWT in an httpOnly, Secure, SameSite=Lax cookie. Browser JS never reads the token. Any `401` clears the cookie and redirects to `/login`. `proxy.ts` (Next 16's renamed middleware, Node.js runtime) guards the `(app)` route group. Not to be confused with `/api/proxy/[...path]`, which forwards requests to the API.
 - The API itself uses Bearer tokens only, with no cookies, because Vercel and Railway are on different domains.
 
 ### Backend layering
