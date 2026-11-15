@@ -18,7 +18,7 @@ Twelve Data or Supabase directly. Mobile-first; UI in Spanish [confirm].
   on the Vercel domain. Browser JavaScript never reads the token.
 - Client requests go to `/api/proxy/*`, which reads the cookie and calls the
   API with `Authorization: Bearer <token>`.
-- `middleware.ts` redirects to `/login` when there's no cookie on protected routes.
+- `proxy.ts` (Next 16 renamed `middleware.ts` to `proxy.ts`) redirects to `/login` when there's no cookie on protected routes.
 - Any `401` from the API → clear cookie, redirect to `/login`. Logout = delete cookie.
 
 ## Pages / routes

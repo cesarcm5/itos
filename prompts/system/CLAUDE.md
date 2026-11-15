@@ -118,7 +118,7 @@ itos/
     │   │   ├── format.ts         # currency/percent formatting (es-MX)
     │   │   └── schemas.ts        # Zod schemas for forms
     │   ├── types/                # API response types
-    │   └── middleware.ts         # redirects to /login without session cookie
+    │   └── proxy.ts              # (Next 16 middleware) redirects to /login without session cookie
     ├── .env.example
     ├── next.config.ts
     ├── package.json
