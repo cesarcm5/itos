@@ -1,8 +1,9 @@
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import { usersMock } from './usersMock.js';
+import { tokensMock, usersMock } from './usersMock.js';
 
 vi.mock('../src/services/users.js', () => usersMock);
+vi.mock('../src/services/tokens.js', () => tokensMock);
 
 // Separate file so the limiters start fresh (vitest isolates modules per file).
 const { app } = await import('../src/app.js');
