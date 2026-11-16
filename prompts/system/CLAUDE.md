@@ -69,7 +69,7 @@ itos/
 │   │   ├── services/
 │   │   │   ├── twelveData.ts     # ONLY place that calls Twelve Data
 │   │   │   ├── marketCache.ts    # cache, stale fallback, request dedupe
-│   │   │   ├── rateLimiter.ts    # upstream credit budget (7/min, 750/day)
+│   │   │   ├── rateLimiter.ts    # upstream credit budget (7/min, 750/day, 100/user/day)
 │   │   │   ├── recommendation.ts # pure functions
 │   │   │   ├── simulator.ts      # pure functions
 │   │   │   ├── alerts.ts         # checkAlerts()

@@ -11,6 +11,8 @@ alerts by email. The frontend never calls Twelve Data directly.
 - **Resend** for emails (free: 100/day) · **node-cron** for alerts
 - **Twelve Data free plan:** 8 credits/min, 800/day, US only. The API uses
   max **7/min and 750/day** (~250/day reserved for alerts)
+- **Per-user quota:** each user can spend at most **100 upstream credits per UTC day**
+  (cache hits are free; alert checks aren't charged to any user)
 
 ## Data model
 | Table | Fields | Notes |
@@ -22,6 +24,7 @@ alerts by email. The frontend never calls Twelve Data directly.
 | alerts | id, user_id, symbol, condition, target_price, status, triggered_price, triggered_at | condition: above/below · status: active/triggered/cancelled · max 5 active |
 | market_cache | key, payload (jsonb), expires_at | survives restarts |
 | api_usage | date, credits_used | daily upstream budget |
+| user_api_usage | user_id, date, credits_used | per-user daily quota (100); PK (user_id, date) |
 
 RLS enabled on all tables with no policies (blocks Supabase's public API);
 the API connects with `DATABASE_URL`.
@@ -65,7 +68,8 @@ the API connects with `DATABASE_URL`.
 | USD/MXN | 24 h | market_cache |
 
 - Identical in-flight requests share one upstream call
-- Budget exhausted or upstream error → stale cache with `stale: true`; no cache → `503 RATE_LIMITED`
+- The user and global daily counters are reserved in one transaction (either refusal leaves both untouched)
+- Budget or user quota exhausted, or upstream error → stale cache with `stale: true`; no cache → `503 RATE_LIMITED`
 - Twelve Data can return HTTP 200 with an error in the body → always check `status`
 
 ## Business logic
