@@ -7,7 +7,6 @@ to put it, and what that habit would have produced, using real market data.
 |---|---|
 | **Frontend** | https://itos-nu.vercel.app/ |
 | **Backend** | itos-production.up.railway.app (`/health`) |
-| **Test user** | `<email>` / `<password>` |
 | **Architecture, decisions and time spent** | [`docs/DECISIONS.md`](./docs/DECISIONS.md) |
 | **AI prompts and specs** | [`prompts/`](./prompts) |
 
