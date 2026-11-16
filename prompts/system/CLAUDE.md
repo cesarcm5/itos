@@ -16,6 +16,7 @@ Specs live in `prompts/specs/`. Read the relevant spec before implementing anyth
 - Business logic (recommendations, simulator) as pure functions with unit tests
 - TypeScript strict; no `any`
 - Error responses follow the format in `02-backend.md`
+- Brand: follow `docs/brand-guidelines.md` for all UI, copy and generated assets. Use the tokens in `frontend/src/app/globals.css` (`ocean-*`, `violet-*`, `primary`, `gain`/`loss`/`warning`, `chart-1`…`chart-5`) instead of hardcoded hex values. Feature icons come from `public/itos_icons/`, utility glyphs from lucide-react. When a token changes, update `globals.css` and `docs/brand-guidelines.md` together.
 - For every feature, ref, bug. Create a new branch pulling from develop
 - Name the branch following the next structure Feat(type of change):New login method (bit description)
 
