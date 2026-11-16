@@ -8,6 +8,7 @@ import { useEffect, useMemo } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AssetSuggestionList } from "@/components/dashboard/asset-suggestion-list";
 import { EmergencyFundBanner, FixedIncomeTip } from "@/components/dashboard/emergency-fund-banner";
+import { EtfExplainer } from "@/components/dashboard/etf-explainer";
 import { RecommendationCard } from "@/components/dashboard/recommendation-card";
 import { WatchlistPanel } from "@/components/dashboard/watchlist-panel";
 import { DataError, dataErrorMessage } from "@/components/data-error";
@@ -102,6 +103,9 @@ function DashboardContent({ rec }: { rec: Recommendation }) {
           </m.div>
           <m.div variants={item} className="mt-2">
             <AssetSuggestionList where={rec.where} />
+          </m.div>
+          <m.div variants={item}>
+            <EtfExplainer assets={rec.where.assets} />
           </m.div>
         </div>
 
