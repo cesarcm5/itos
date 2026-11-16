@@ -112,3 +112,16 @@ export const apiUsage = pgTable('api_usage', {
   date: date('date').primaryKey(),
   creditsUsed: integer('credits_used').notNull().default(0),
 }).enableRLS();
+
+// Per-user share of the daily upstream budget (USER_DAILY_LIMIT in rateLimiter.ts).
+export const userApiUsage = pgTable(
+  'user_api_usage',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    date: date('date').notNull(),
+    creditsUsed: integer('credits_used').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.date] })],
+).enableRLS();

@@ -41,10 +41,10 @@ Browser → Next.js `/api/proxy/[...path]` (reads the httpOnly JWT cookie, adds 
 - `app.ts` exports the Express app for Supertest. `index.ts` starts the server and the scheduler.
 
 ### Upstream budget (the hardest constraint)
-The Twelve Data free plan allows 8 credits/min and 800/day. The API caps itself at **7/min and 750/day** (`rateLimiter.ts`, persisted in `api_usage`), leaving about 250/day for alerts.
+The Twelve Data free plan allows 8 credits/min and 800/day. The API caps itself at **7/min and 750/day** (`rateLimiter.ts`, persisted in `api_usage`), leaving about 250/day for alerts. Each user can also spend at most **100 credits/day** (`user_api_usage`), charged through the request context set by `requireAuth`. Cache hits are free and alerts aren't charged to anyone.
 - The cache lives in the `market_cache` table (jsonb, survives restarts). TTLs: quote 60 s, daily history 12 h, monthly history 24 h, search 7 d, USD/MXN 24 h.
 - Identical in-flight requests share one upstream call.
-- When the budget is exhausted or upstream errors, serve the stale cache with `stale: true`. With no cache, return `503 RATE_LIMITED`.
+- When the budget or the user's quota is exhausted, or upstream errors, serve the stale cache with `stale: true`. With no cache, return `503 RATE_LIMITED`.
 - Twelve Data can return HTTP 200 with an error in the body, so always check `status`.
 
 ### Price alerts

@@ -1,11 +1,14 @@
 import { sql as dsql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { apiUsage } from '../db/schema.js';
+import { apiUsage, userApiUsage } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
+import { currentUserId } from '../lib/requestContext.js';
 
 // Twelve Data free plan: 8 credits/min, 800/day. We stay below both.
 export const MINUTE_LIMIT = 7;
 export const DAILY_LIMIT = 750;
+// Max upstream credits one user can spend per UTC day. Cache hits are free; alerts aren't charged to anyone.
+export const USER_DAILY_LIMIT = 100;
 const WINDOW_MS = 60_000;
 
 // Timestamps of credits spent in the last minute. In memory: the API runs as a single instance.
@@ -25,11 +28,20 @@ function secondsUntilUtcMidnight(now: Date): number {
   return Math.max(1, Math.ceil((midnight - now.getTime()) / 1000));
 }
 
+/** Thrown inside the transaction to roll it back without masking real DB errors. */
+class QuotaExceeded extends Error {
+  constructor(readonly scope: 'user' | 'global') {
+    super(scope);
+  }
+}
+
 /**
  * Reserves upstream credits or throws RATE_LIMITED (with retryAfter).
- * The daily counter lives in api_usage and is incremented atomically, so it survives restarts.
+ * Inside an authenticated request the credits also count against that user's daily quota.
+ * Both daily counters live in the DB and are incremented atomically in one transaction,
+ * so they survive restarts and a refusal from either leaves both untouched.
  */
-export async function acquireCredits(credits = 1): Promise<void> {
+export async function acquireCredits(credits = 1, userId = currentUserId()): Promise<void> {
   const now = Date.now();
   pruneWindow(now);
   if (recent.length + credits > MINUTE_LIMIT) {
@@ -43,24 +55,40 @@ export async function acquireCredits(credits = 1): Promise<void> {
 
   const today = new Date(now).toISOString().slice(0, 10); // UTC day
   try {
-    const rows = await db
-      .insert(apiUsage)
-      .values({ date: today, creditsUsed: credits })
-      .onConflictDoUpdate({
-        target: apiUsage.date,
-        set: { creditsUsed: dsql`${apiUsage.creditsUsed} + ${credits}` },
-        setWhere: dsql`${apiUsage.creditsUsed} + ${credits} <= ${DAILY_LIMIT}`,
-      })
-      .returning({ creditsUsed: apiUsage.creditsUsed });
+    await db.transaction(async (tx) => {
+      if (userId) {
+        const userRows = await tx
+          .insert(userApiUsage)
+          .values({ userId, date: today, creditsUsed: credits })
+          .onConflictDoUpdate({
+            target: [userApiUsage.userId, userApiUsage.date],
+            set: { creditsUsed: dsql`${userApiUsage.creditsUsed} + ${credits}` },
+            setWhere: dsql`${userApiUsage.creditsUsed} + ${credits} <= ${USER_DAILY_LIMIT}`,
+          })
+          .returning({ creditsUsed: userApiUsage.creditsUsed });
+        if (userRows.length === 0) throw new QuotaExceeded('user');
+      }
 
-    if (rows.length === 0) {
-      releaseMinuteSlots(now, credits);
-      throw new AppError('RATE_LIMITED', 'Daily market data limit reached', {
-        retryAfter: secondsUntilUtcMidnight(new Date(now)),
-      });
-    }
+      const rows = await tx
+        .insert(apiUsage)
+        .values({ date: today, creditsUsed: credits })
+        .onConflictDoUpdate({
+          target: apiUsage.date,
+          set: { creditsUsed: dsql`${apiUsage.creditsUsed} + ${credits}` },
+          setWhere: dsql`${apiUsage.creditsUsed} + ${credits} <= ${DAILY_LIMIT}`,
+        })
+        .returning({ creditsUsed: apiUsage.creditsUsed });
+      if (rows.length === 0) throw new QuotaExceeded('global');
+    });
   } catch (err) {
-    if (!(err instanceof AppError)) releaseMinuteSlots(now, credits);
+    releaseMinuteSlots(now, credits);
+    if (err instanceof QuotaExceeded) {
+      const message =
+        err.scope === 'user'
+          ? 'You reached your daily market data limit, try again tomorrow'
+          : 'Daily market data limit reached';
+      throw new AppError('RATE_LIMITED', message, { retryAfter: secondsUntilUtcMidnight(new Date(now)) });
+    }
     throw err;
   }
 }

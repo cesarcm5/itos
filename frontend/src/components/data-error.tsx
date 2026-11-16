@@ -6,6 +6,10 @@ import { ApiError } from "@/lib/api-client";
 /** Friendly copy for a failed data view. `what` completes "No pudimos cargar …". */
 export function dataErrorMessage(error: Error, what: string): string {
   if (error instanceof ApiError && error.code === "RATE_LIMITED") {
+    // A daily limit (global or per user) resets at midnight UTC; the per-minute one within a minute.
+    if (error.retryAfter !== undefined && error.retryAfter > 120) {
+      return "Llegamos al límite diario de datos del mercado. Intenta de nuevo mañana.";
+    }
     return "Llegamos al límite de datos del mercado. Intenta de nuevo en un minuto.";
   }
   return `No pudimos cargar ${what}.`;
