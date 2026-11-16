@@ -80,6 +80,12 @@ export type Alert = {
   triggeredAt: string | null;
 };
 
+export type AlertStatus = Alert["status"];
+export type AlertList = { items: Alert[] };
+
+/** Same cap as the API's ALERT_LIMIT (backend/src/services/alerts.ts). */
+export const ALERT_LIMIT = 5;
+
 export const quoteKey = (symbol: string) => ["quote", symbol] as const;
 export const historyKey = (symbol: string, range: Range) => ["history", symbol, range] as const;
 export const ALERTS_KEY = ["alerts"] as const;

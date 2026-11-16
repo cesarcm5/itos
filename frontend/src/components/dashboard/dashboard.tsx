@@ -39,7 +39,7 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-1 flex-col bg-muted/60">
-      <AppHeader />
+      <AppHeader current="dashboard" />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-8 pb-12 sm:px-6 sm:pt-10">
         {rec.isPending || missingProfile ? (
           <DashboardSkeleton />

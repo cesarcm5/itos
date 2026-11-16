@@ -43,3 +43,16 @@ export const profileFormSchema = z.object({
 
 export type ProfileFormInput = z.input<typeof profileFormSchema>;
 export type ProfileFormOutput = z.output<typeof profileFormSchema>;
+
+const plainAmount = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2, useGrouping: true });
+
+/** A saved profile as form values (the inputs and radios hold strings). */
+export function profileToForm(profile: Profile): ProfileFormInput {
+  return {
+    monthlyIncomeMxn: plainAmount.format(profile.monthlyIncomeMxn),
+    monthlyExpensesMxn: plainAmount.format(profile.monthlyExpensesMxn),
+    hasEmergencyFund: profile.hasEmergencyFund ? "yes" : "no",
+    horizon: profile.horizon,
+    risk: profile.risk,
+  };
+}
