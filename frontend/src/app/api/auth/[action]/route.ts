@@ -2,12 +2,23 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { loginSchema, registerSchema } from "@/lib/schemas/auth";
 import { callApi, clientIp, errorResponse } from "@/lib/server/api";
-import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
+import { clearSessionCookies, setSessionCookies } from "@/lib/server/session";
+import { REFRESH_COOKIE } from "@/lib/session";
 
 type AuthApiResponse = {
   token: string;
+  refreshToken: string;
   user: { id: string; email: string; createdAt: string };
 };
+
+function postJson(path: string, body: unknown, request: NextRequest): Promise<Response> {
+  return callApi(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    ip: clientIp(request),
+  });
+}
 
 /** Only relative, same-origin paths: blocks open redirects like //evil.com. */
 function safeNext(value: unknown): string | null {
@@ -38,7 +49,10 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/auth/[a
   const cookieStore = await cookies();
 
   if (action === "logout") {
-    cookieStore.delete(SESSION_COOKIE);
+    const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
+    clearSessionCookies(cookieStore);
+    // Best effort: the cookies are gone either way.
+    if (refreshToken) await postJson("/auth/logout", { refreshToken }, request).catch(() => null);
     return new Response(null, { status: 204 });
   }
 
@@ -55,20 +69,15 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/auth/[a
 
   let res: Response;
   try {
-    res = await callApi(`/auth/${action}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(parsed.data),
-      ip: clientIp(request),
-    });
+    res = await postJson(`/auth/${action}`, parsed.data, request);
   } catch {
     return errorResponse(502, "UPSTREAM_ERROR", "API unreachable");
   }
 
   if (!res.ok) return upstreamError(res);
 
-  const { token, user } = (await res.json()) as AuthApiResponse;
-  cookieStore.set(SESSION_COOKIE, token, sessionCookieOptions);
+  const { token, refreshToken, user } = (await res.json()) as AuthApiResponse;
+  setSessionCookies(cookieStore, { token, refreshToken });
 
   const next = raw && typeof raw === "object" && "next" in raw ? safeNext(raw.next) : null;
   const redirectTo = action === "register" ? "/onboarding" : await resolveRedirect(token, next);

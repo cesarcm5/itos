@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AppError } from '../lib/errors.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { getCurrentUser, login, register } from '../services/auth.js';
+import { getCurrentUser, login, logout, refresh, register } from '../services/auth.js';
 
 function authLimiter(windowMs: number, limit: number) {
   return rateLimit({
@@ -25,6 +25,7 @@ function authLimiter(windowMs: number, limit: number) {
 // Per IP. /auth/me isn't limited: it can't be brute-forced.
 const registerLimiter = authLimiter(60 * 60 * 1000, 5); // 5 sign-ups / hour
 const loginLimiter = authLimiter(60 * 1000, 6); // 6 attempts / minute
+const refreshLimiter = authLimiter(60 * 1000, 30); // 30 refreshes / minute
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(254));
 
@@ -36,6 +37,9 @@ const registerSchema = z.object({
     .min(8, 'Password must be at least 8 characters')
     .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be at most 72 bytes'),
 });
+
+// Refresh tokens are 43 base64url chars; the bounds just reject junk early.
+const refreshSchema = z.object({ refreshToken: z.string().min(16).max(200) });
 
 const loginSchema = z.object({
   email,
@@ -59,4 +63,15 @@ authRouter.post('/login', loginLimiter, validate({ body: loginSchema }), async (
 authRouter.get('/me', requireAuth, async (req, res) => {
   // requireAuth guarantees req.user
   res.json({ user: await getCurrentUser(req.user!.id) });
+});
+
+authRouter.post('/refresh', refreshLimiter, validate({ body: refreshSchema }), async (req, res) => {
+  const { refreshToken } = req.body as z.infer<typeof refreshSchema>;
+  res.json(await refresh(refreshToken));
+});
+
+authRouter.post('/logout', refreshLimiter, validate({ body: refreshSchema }), async (req, res) => {
+  const { refreshToken } = req.body as z.infer<typeof refreshSchema>;
+  await logout(refreshToken);
+  res.status(204).end();
 });

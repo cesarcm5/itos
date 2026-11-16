@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { store, usersMock } from './usersMock.js';
+import { refreshStore, resetAuthMocks, store, tokensMock, usersMock } from './usersMock.js';
 
 vi.mock('../src/services/users.js', () => usersMock);
+vi.mock('../src/services/tokens.js', () => tokensMock);
 
 const { app } = await import('../src/app.js');
 
@@ -16,12 +17,12 @@ let ip = '';
 const post = (path: string) => request(app).post(path).set('X-Forwarded-For', ip);
 
 beforeEach(() => {
-  store.clear();
+  resetAuthMocks();
   ip = `203.0.113.${++ipCounter}`;
 });
 
 describe('POST /auth/register', () => {
-  it('creates a user, lowercases the email and returns a valid HS256 token', async () => {
+  it('creates a user, lowercases the email and returns a 15-min HS256 token', async () => {
     const res = await post('/auth/register').send(creds);
 
     expect(res.status).toBe(201);
@@ -31,7 +32,8 @@ describe('POST /auth/register', () => {
     const decoded = jwt.verify(res.body.token, SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
     expect(decoded.sub).toBe(res.body.user.id);
     expect(decoded.email).toBe('ana@example.com');
-    expect(decoded.exp! - decoded.iat!).toBe(24 * 60 * 60);
+    expect(decoded.exp! - decoded.iat!).toBe(15 * 60);
+    expect(res.body.refreshToken).toEqual(expect.any(String));
 
     const stored = store.get(res.body.user.id)!;
     expect(stored.passwordHash).not.toBe(creds.password);
@@ -109,6 +111,71 @@ describe('GET /auth/me', () => {
     const res = await request(app).get('/auth/me').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /auth/refresh', () => {
+  it('rotates the refresh token and returns a new access token', async () => {
+    const { body } = await post('/auth/register').send(creds);
+    const res = await post('/auth/refresh').send({ refreshToken: body.refreshToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toEqual(expect.any(String));
+    expect(res.body.refreshToken).toEqual(expect.any(String));
+    expect(res.body.refreshToken).not.toBe(body.refreshToken);
+    expect(res.body.user.id).toBe(body.user.id);
+    // Old one revoked, new one in the same family
+    const rows = [...refreshStore.values()];
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.familyId)).size).toBe(1);
+  });
+
+  it('returns only an access token when a just-rotated token is reused (parallel requests)', async () => {
+    const { body } = await post('/auth/register').send(creds);
+    const first = await post('/auth/refresh').send({ refreshToken: body.refreshToken });
+    const second = await post('/auth/refresh').send({ refreshToken: body.refreshToken });
+
+    expect(second.status).toBe(200);
+    expect(second.body.token).toEqual(expect.any(String));
+    expect(second.body).not.toHaveProperty('refreshToken');
+    // The first response's successor still works
+    expect((await post('/auth/refresh').send({ refreshToken: first.body.refreshToken })).status).toBe(200);
+  });
+
+  it('revokes the whole family when a rotated token is reused after the grace window', async () => {
+    const { body } = await post('/auth/register').send(creds);
+    const first = await post('/auth/refresh').send({ refreshToken: body.refreshToken });
+    for (const row of refreshStore.values()) {
+      if (row.revokedAt) row.revokedAt = new Date(Date.now() - 60_000);
+    }
+
+    const reuse = await post('/auth/refresh').send({ refreshToken: body.refreshToken });
+    expect(reuse.status).toBe(401);
+    expect(reuse.body.error.code).toBe('UNAUTHORIZED');
+    expect((await post('/auth/refresh').send({ refreshToken: first.body.refreshToken })).status).toBe(401);
+  });
+
+  it('rejects unknown and expired tokens', async () => {
+    expect((await post('/auth/refresh').send({ refreshToken: 'x'.repeat(43) })).status).toBe(401);
+
+    const { body } = await post('/auth/register').send(creds);
+    for (const row of refreshStore.values()) row.expiresAt = new Date(Date.now() - 1);
+    expect((await post('/auth/refresh').send({ refreshToken: body.refreshToken })).status).toBe(401);
+  });
+});
+
+describe('POST /auth/logout', () => {
+  it('revokes the family so the refresh token stops working, even inside the grace window', async () => {
+    const { body } = await post('/auth/register').send(creds);
+    const rotated = await post('/auth/refresh').send({ refreshToken: body.refreshToken });
+
+    expect((await post('/auth/logout').send({ refreshToken: rotated.body.refreshToken })).status).toBe(204);
+    expect((await post('/auth/refresh').send({ refreshToken: rotated.body.refreshToken })).status).toBe(401);
+    expect((await post('/auth/refresh').send({ refreshToken: body.refreshToken })).status).toBe(401);
+  });
+
+  it('returns 204 for an unknown token', async () => {
+    expect((await post('/auth/logout').send({ refreshToken: 'x'.repeat(43) })).status).toBe(204);
   });
 });
 

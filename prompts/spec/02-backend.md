@@ -16,6 +16,7 @@ alerts by email. The frontend never calls Twelve Data directly.
 | Table | Fields | Notes |
 |---|---|---|
 | users | id, email, password_hash, created_at | email unique, lowercase |
+| refresh_tokens | id, user_id, family_id, token_hash, expires_at, revoked_at, created_at | SHA-256 of the opaque token; one family per login |
 | profiles | user_id, monthly_income_mxn, monthly_expenses_mxn, has_emergency_fund, horizon, risk | horizon: short/medium/long · risk: low/medium/high |
 | watchlist | user_id, symbol, created_at | unique(user_id, symbol) |
 | alerts | id, user_id, symbol, condition, target_price, status, triggered_price, triggered_at | condition: above/below · status: active/triggered/cancelled · max 5 active |
@@ -26,10 +27,19 @@ RLS enabled on all tables with no policies (blocks Supabase's public API);
 the API connects with `DATABASE_URL`.
 
 ## Auth
-- `POST /auth/register`, `POST /auth/login` → `{ token, user }`; `GET /auth/me`
-- bcrypt (cost 10); JWT HS256 `{ sub, email }`, expires in 24 h
+- `POST /auth/register`, `POST /auth/login` → `{ token, refreshToken, user }`; `GET /auth/me`
+- bcrypt (cost 10); access JWT HS256 `{ sub, email }`, expires in 15 min
 - `Authorization: Bearer <token>` (no cookies: Vercel and Railway are different domains)
 - Wrong email or password → the same `401`; per IP: `/auth/register` limited to 5 req / hour, `/auth/login` to 6 req / min
+
+**Refresh tokens** (rotating, DB-backed)
+- Opaque 32-byte random token (base64url), stored as SHA-256 in `refresh_tokens`, valid 30 days
+- Each login/register starts a new family; `POST /auth/refresh { refreshToken }` revokes the token and issues a new one in the same family → `{ token, refreshToken, user }`
+- Rotation is atomic (`UPDATE … WHERE revoked_at IS NULL RETURNING` + insert in one transaction)
+- Reuse of a rotated token within 30 s (parallel requests) → `{ token, user }` with no new refresh token. Reuse after that → the whole family is revoked, `401`
+- Unknown, expired or revoked token → `401 UNAUTHORIZED`
+- `POST /auth/logout { refreshToken }` revokes the family → `204` (always)
+- Per IP: `/auth/refresh` and `/auth/logout` limited to 30 req / min
 
 ## Endpoints
 | Method | Path | Auth | Request | Response | Upstream cost |

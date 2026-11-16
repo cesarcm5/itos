@@ -14,12 +14,17 @@ Twelve Data or Supabase directly. Mobile-first; UI in Spanish [confirm].
 
 ## Auth handling
 - Login/register go through Next.js route handlers (`/api/auth/*`), which call
-  the API and store the JWT in an **httpOnly, Secure, SameSite=Lax cookie**
-  on the Vercel domain. Browser JavaScript never reads the token.
+  the API and store two **httpOnly, Secure, SameSite=Lax cookies** on the Vercel
+  domain: `itos_session` (access JWT, 15 min) and `itos_refresh` (refresh token,
+  30 days). Browser JavaScript never reads either token.
 - Client requests go to `/api/proxy/*`, which reads the cookie and calls the
   API with `Authorization: Bearer <token>`.
-- `proxy.ts` (Next 16 renamed `middleware.ts` to `proxy.ts`) redirects to `/login` when there's no cookie on protected routes.
-- Any `401` from the API → clear cookie, redirect to `/login`. Logout = delete cookie.
+- Silent refresh: when the access cookie is missing or the API returns `401`,
+  `/api/proxy` calls `POST /auth/refresh` once with the refresh cookie, updates
+  both cookies and retries. Refreshes for the same token are shared within one
+  server instance. If the API is down (5xx/429), cookies are kept.
+- `proxy.ts` (Next 16 renamed `middleware.ts` to `proxy.ts`) redirects to `/login` when neither cookie exists on protected routes.
+- Refresh fails with `401` (or any other `401`) → clear both cookies, redirect to `/login`. Logout = revoke the refresh family in the API + delete both cookies.
 
 ## Pages / routes
 | Route | Purpose | Auth | Data used |
