@@ -89,4 +89,4 @@ assets
 
 ## Open questions
 - UI language: Spanish only, or English for the reviewers?
-- Shared Zod schemas between frontend and backend (monorepo package), or duplicated?
+
