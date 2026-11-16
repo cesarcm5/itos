@@ -41,10 +41,10 @@ Browser → Next.js `/api/proxy/[...path]` (reads the httpOnly JWT cookie, adds 
 - `app.ts` exports the Express app for Supertest. `index.ts` starts the server and the scheduler.
 
 ### Upstream budget (the hardest constraint)
-The Twelve Data free plan allows 8 credits/min and 800/day. The API caps itself at **7/min and 750/day** (`rateLimiter.ts`, persisted in `api_usage`), leaving about 250/day for alerts.
+The Twelve Data free plan allows 8 credits/min and 800/day. The API caps itself at **7/min and 750/day** (`rateLimiter.ts`, persisted in `api_usage`), leaving about 250/day for alerts. Each user can also spend at most **100 credits/day** (`user_api_usage`), charged through the request context set by `requireAuth`. Cache hits are free and alerts aren't charged to anyone.
 - The cache lives in the `market_cache` table (jsonb, survives restarts). TTLs: quote 60 s, daily history 12 h, monthly history 24 h, search 7 d, USD/MXN 24 h.
 - Identical in-flight requests share one upstream call.
-- When the budget is exhausted or upstream errors, serve the stale cache with `stale: true`. With no cache, return `503 RATE_LIMITED`.
+- When the budget or the user's quota is exhausted, or upstream errors, serve the stale cache with `stale: true`. With no cache, return `503 RATE_LIMITED`.
 - Twelve Data can return HTTP 200 with an error in the body, so always check `status`.
 
 ### Price alerts
@@ -64,4 +64,5 @@ The Twelve Data free plan allows 8 credits/min and 800/day. The API caps itself 
 - Validate every input with Zod. TypeScript strict, no `any`.
 - Use env vars for config (validated in `config.ts`) and update `.env.example` whenever a var is added.
 - Frontend: import GSAP only in `app/page.tsx` and `components/landing/`, through `useGSAP`. Use `LazyMotion` + `m` for Motion. Respect `prefers-reduced-motion`. Every data view needs loading (skeletons), empty, error + retry, and stale states. Format currency with `Intl.NumberFormat('es-MX')`.
-- Git: create a new branch from `develop` for every feature, refactor or bug fix. PRs target `main`.
+- Brand: follow `docs/brand-guidelines.md` for all UI, copy and generated assets. Use the tokens in `frontend/src/app/globals.css` (`ocean-*`, `violet-*`, `primary`, `gain`/`loss`/`warning`, `chart-1`…`chart-5`) instead of hardcoded hex values. Feature icons come from `public/itos_icons/`, utility glyphs from lucide-react. When a token changes, update `globals.css` and `docs/brand-guidelines.md` together.
+- Git: create a new branch from `develop` for every feature, refactor or bug fix. PRs target `develop`.

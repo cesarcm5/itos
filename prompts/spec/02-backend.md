@@ -11,25 +11,38 @@ alerts by email. The frontend never calls Twelve Data directly.
 - **Resend** for emails (free: 100/day) · **node-cron** for alerts
 - **Twelve Data free plan:** 8 credits/min, 800/day, US only. The API uses
   max **7/min and 750/day** (~250/day reserved for alerts)
+- **Per-user quota:** each user can spend at most **100 upstream credits per UTC day**
+  (cache hits are free; alert checks aren't charged to any user)
 
 ## Data model
 | Table | Fields | Notes |
 |---|---|---|
 | users | id, email, password_hash, created_at | email unique, lowercase |
+| refresh_tokens | id, user_id, family_id, token_hash, expires_at, revoked_at, created_at | SHA-256 of the opaque token; one family per login |
 | profiles | user_id, monthly_income_mxn, monthly_expenses_mxn, has_emergency_fund, horizon, risk | horizon: short/medium/long · risk: low/medium/high |
 | watchlist | user_id, symbol, created_at | unique(user_id, symbol) |
 | alerts | id, user_id, symbol, condition, target_price, status, triggered_price, triggered_at | condition: above/below · status: active/triggered/cancelled · max 5 active |
 | market_cache | key, payload (jsonb), expires_at | survives restarts |
 | api_usage | date, credits_used | daily upstream budget |
+| user_api_usage | user_id, date, credits_used | per-user daily quota (100); PK (user_id, date) |
 
 RLS enabled on all tables with no policies (blocks Supabase's public API);
 the API connects with `DATABASE_URL`.
 
 ## Auth
-- `POST /auth/register`, `POST /auth/login` → `{ token, user }`; `GET /auth/me`
-- bcrypt (cost 10); JWT HS256 `{ sub, email }`, expires in 24 h
+- `POST /auth/register`, `POST /auth/login` → `{ token, refreshToken, user }`; `GET /auth/me`
+- bcrypt (cost 10); access JWT HS256 `{ sub, email }`, expires in 15 min
 - `Authorization: Bearer <token>` (no cookies: Vercel and Railway are different domains)
-- Wrong email or password → the same `401`; `/auth/*` limited to 10 req / 15 min per IP
+- Wrong email or password → the same `401`; per IP: `/auth/register` limited to 5 req / hour, `/auth/login` to 6 req / min
+
+**Refresh tokens** (rotating, DB-backed)
+- Opaque 32-byte random token (base64url), stored as SHA-256 in `refresh_tokens`, valid 30 days
+- Each login/register starts a new family; `POST /auth/refresh { refreshToken }` revokes the token and issues a new one in the same family → `{ token, refreshToken, user }`
+- Rotation is atomic (`UPDATE … WHERE revoked_at IS NULL RETURNING` + insert in one transaction)
+- Reuse of a rotated token within 30 s (parallel requests) → `{ token, user }` with no new refresh token. Reuse after that → the whole family is revoked, `401`
+- Unknown, expired or revoked token → `401 UNAUTHORIZED`
+- `POST /auth/logout { refreshToken }` revokes the family → `204` (always)
+- Per IP: `/auth/refresh` and `/auth/logout` limited to 30 req / min
 
 ## Endpoints
 | Method | Path | Auth | Request | Response | Upstream cost |
@@ -55,7 +68,8 @@ the API connects with `DATABASE_URL`.
 | USD/MXN | 24 h | market_cache |
 
 - Identical in-flight requests share one upstream call
-- Budget exhausted or upstream error → stale cache with `stale: true`; no cache → `503 RATE_LIMITED`
+- The user and global daily counters are reserved in one transaction (either refusal leaves both untouched)
+- Budget or user quota exhausted, or upstream error → stale cache with `stale: true`; no cache → `503 RATE_LIMITED`
 - Twelve Data can return HTTP 200 with an error in the body → always check `status`
 
 ## Business logic
